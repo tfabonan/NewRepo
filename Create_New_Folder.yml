@@ -1,0 +1,49 @@
+---
+- name: Create New Folder
+  hosts: "{{ ComputerName }}"
+  gather_facts: false
+  tasks:
+    - name: Run PowerShell script
+      ansible.windows.win_powershell:
+        script: |
+
+          # Execute Powershell Script in Windows Host
+          Try {
+              $ErrorActionPreference = 'Stop'
+              
+              If (!(Test-Path $FolderPath)) {
+                New-Item -Path $FolderPath -ItemType directory
+                Write-Output "INFO: [$ActionTask]: Folder [$FolderPath] created successfully"
+              }
+              else {
+                Write-Output "INFO: [$ActionTask]: Folder [$FolderPath] already exists - no action taken."
+              }
+            }
+              Catch {
+              #$_
+                  Write-Output "ERROR: [$ActionTask]: An  error has occured creating folder [$FolderPath]. Error details: $($_.Exception.Message)"
+              }
+          }
+
+          #create the credential object using username and password
+          $Cred = New-Object System.Management.Automation.PSCredential -ArgumentList ($ADUsername, $ADPassword)
+
+          #create the session variable for Invoke-Command
+          $SessOpt = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck -ProxyAccessType NoProxyServer
+          $remoteSession = New-PSSession -computerName $ComputerName -credential $Cred -SessionOption $SessOpt
+
+          Invoke-Command -Session $remoteSession -Scriptblock $script -ArgumentList $ActionTask, $FolderPath
+
+          #Invoke-Command -Scriptblock $script -ArgumentList $OnlineCred, $Cred, $ActionTask, $Tenant, $ClientId, $GraphApiUrl
+
+          if (!$?) {
+            Write-Output "ERROR: [$ActionTask]: An unknown error has occured. Please see below for details."
+            Write-Output $Error[0]
+          }
+
+          Get-PSSession| Remove-PSSession 
+          
+      register: ps_output
+    - name: Display Powershell Output
+      ansible.builtin.debug:
+         var: ps_output
