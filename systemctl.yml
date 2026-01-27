@@ -1,40 +1,20 @@
 ---
-- name: Get Windows Service
-  hosts: "{{ ComputerName }}"
+- name: Execute PowerShell script from GitHub
+  hosts: "{{ Hostname }}"
   gather_facts: false
   tasks:
     - name: Run PowerShell script
       ansible.windows.win_powershell:
         script: |
+           # Read the PowerShell script content from the GitHub repository
+           # (e.g., using Get-Content or by directly including the script here)
+           # Example: If your script is named 'myscript.ps1' in the repo root
+           #$scriptContent = Get-Content ".scripts\powershell\test.ps1"
+           #Invoke-Expression $scriptContent
 
-          # Execute Powershell Script in Windows Host
-          $ErrorActionPreference = "Stop"
-          $WarningPreference = "SilentlyContinue"
-          Try {
-            if (-Not $ServiceName) {
-              Throw "The Service Name is blank."
-            }
-            
-            $Service = systemctl show ssh.service --property=ExecStart
-            $Status = $Service.status
-            $StartType = $Service.StartType
-            $DisplayName = $Service.DisplayName
-            
-            Write-Output "INFO: [$ActionTask] The status of service [$ServiceName] is [$Status], its start type is [$StartType] and its display name is [$DisplayName]"
-            
-            $Output = @{
-              'status' = 	"$Status"
-              'start_type' = "$StartType"
-              'display_name' = "$DisplayName"
-            }
-            
-            $Json = ConvertTo-Json $Output -Compress
-            Write-Output "JSON: $Json"
-          }
-          Catch {
-            Write-Output "ERROR: [$ActionTask] Details: $($_.Exception.Message)"
-          }
-         
+           # Alternatively, if the script is simple, you can directly embed it
+           Write-Host "Executing PowerShell script to {{ Hostname }}!"
+           Systemctl show ssh.service
       register: ps_output
     - name: Display Powershell Output
       ansible.builtin.debug:
