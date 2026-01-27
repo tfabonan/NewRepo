@@ -1,0 +1,339 @@
+---
+- name: Check CyberArk and Test Batch WinRM Connectivity
+  hosts: "{{ ComputerName }}"
+  gather_facts: false
+  tasks:
+    - name: Run PowerShell script
+      ansible.windows.win_powershell:
+        script: |
+          $ActionTask = 'test batch winrm connectivity'
+          $ComputerNames1 = "{{ ComputerNames1 }}"
+          $ComputerNames2 = "{{ ComputerNames2 }}"
+          $ComputerNames3 = "{{ ComputerNames3 }}"
+          $ComputerNames4 = "{{ ComputerNames4 }}"
+          $ComputerNames5 = "{{ ComputerNames5 }}"
+          $ComputerNames6 = "{{ ComputerNames6 }}"
+          $ComputerNames7 = "{{ ComputerNames7 }}"
+          $ComputerNames8 = "{{ ComputerNames8 }}"
+          $ComputerNames9 = "{{ ComputerNames9 }}"
+          $ComputerNames10 = "{{ ComputerNames10 }}"
+          $Delimiter = "{{ Delimiter }}"
+          $Region = "{{ Region }}"
+          $LocalUsername = "{{ LOCAL_USERNAME }}"
+
+          # Execute Powershell Script in Windows Host
+          Try {
+              $ErrorActionPreference = "Stop"
+              
+              ####################### Ports & PSSession test script block #######################
+              
+              $JobScript = {
+                Param (
+                  $ComputerName, $UserName, $SecPassword
+                )
+                
+                $ErrorActionPreference = "Stop"
+                $ComputerName = $ComputerName.Trim()
+                
+                #Password check
+                try {
+                  if ($SecPassword) {
+                      $CyberArkTestResult = "SUCCESS: Onboarded to CyberArk OK"
+                      #$SecPassword = $Password| ConvertTo-SecureString -AsPlainText -Force
+                      $PSCred = New-Object System.Management.Automation.PSCredential -ArgumentList ($UserName,$SecPassword)
+                  }
+                  else {
+                    $CyberArkTestResult = "ERROR: Not onboarded to CyberArk"
+                    $SessionTestResult = "ERROR: PSSession not initiated - missing password"
+                  }
+                }
+                catch {
+                  $CyberArkTestResult = "ERROR: Could not create PSCredential using CyberArk password"
+                  $SessionTestResult = "ERROR: PSSession not initiated - missing password"
+                }
+                
+                
+                #Test-NetConnection ports check
+                $Http = Test-NetConnection -Port 5985 -ComputerName $ComputerName -InformationLevel Quiet -WarningAction SilentlyContinue
+                $Https = Test-NetConnection -Port 5986 -ComputerName $ComputerName -InformationLevel Quiet -WarningAction SilentlyContinue
+                
+                if ($Http -And $Https) {
+                  $PortTestResult = "SUCCESS: TNC to ports 5985 & 5986 OK"
+                  $PortOpen = $True
+                }
+                elseif ($Http) {
+                  $PortTestResult = "SUCCESS: TNC to port 5985 OK"
+                  $PortOpen = $True
+                }
+                elseif ($Https) {
+                  $PortTestResult = "SUCCESS: TNC to port 5986 OK"
+                  $PortOpen = $True
+                }
+                else {
+                  $PortTestResult = "ERROR: TNC failed on ports 5985 & 5986"
+                  $PortOpen = $False
+                }
+                
+                
+                #PSSession check
+                $SessOpt = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck -OpenTimeout 60000 -ProxyAccessType NoProxyServer
+                
+                if ($PortOpen) {
+                  if ($SecPassword) {
+                    try {
+                      #try HTTP on port 5985
+                      $TestSession = New-PSSession -ComputerName $ComputerName -Credential $PSCred -SessionOption $SessOpt
+                      $SessionTestResult = "SUCCESS: Remote PSSession connected OK on port 5985"	
+                    }
+                    catch {
+                      try {
+                        #HTTP on 5985 failed so try HTTPS on port 5986
+                        $TestSession = New-PSSession -ComputerName $ComputerName -Credential $PSCred -Port 5986 -UseSSL -SessionOption $SessOpt
+                        $SessionTestResult = "SUCCESS: Remote PSSession connected OK on port 5986"	
+                      }
+                      catch {
+                        #Log reason for HTTPS New-PSSession failure 
+                        if ($_.Exception.Message -match "The SSL connection cannot be established") {
+                          $SessionTestResult = "ERROR: The SSL connection cannot be established. Verify that the target is configured for HTTPS requests"
+                        }
+                        elseif ($_.Exception.Message -match "Encountered an internal error in the SSL library") {
+                          $SessionTestResult = "ERROR: The certificate on the target has the following errors: Encountered an internal error in the SSL library"
+                        }
+                        elseif ($_.Exception.Message -match "We can't sign you in with this credential") {
+                          $SessionTestResult = "ERROR: A Kerberos authentication error occurred: We can't sign you in with this credential because your domain isn't available"
+                        }
+                        elseif ($_.Exception.Message -match "Access is denied") {
+                          $SessionTestResult = "ERROR: Connecting to target failed with the following error message : Access is denied"
+                        }
+                        elseif ($_.Exception.Message -match "The SSL certificate is expired") {
+                          $SessionTestResult = "ERROR: The certificate on the target has the following errors: The SSL certificate is expired"
+                        }
+                        elseif ($_.Exception.Message -match "The WSMan service could not launch a host process") {
+                          $SessionTestResult = "ERROR: The WSMan service could not launch a host process.  Check the WSMan provider host server and proxy are registered"
+                        }
+                        else {
+                          $SessionTestResult = "ERROR: $($_.Exception.Message)"
+                        }	
+                      }
+                    }
+                    finally {
+                      Get-PSSession| Remove-PSSession
+                    }
+                  }
+                }
+                else {
+                  $SessionTestResult = "ERROR: PSSession not initiated - no WinRM connectivity"
+                }
+                
+                $AllResults = "$ComputerName,$CyberArkTestResult,$PortTestResult,$SessionTestResult"
+                Return $AllResults
+              }
+              
+              ############################################################################################
+              
+              
+              $ComputerList = ConvertFrom-Json $ComputerListJson
+              $Results = "Server Name,CyberArk Onboarding Check,WinRM Port Check,PSSSession Connection Check`r`n"
+              
+              #Log start time of WinRM checks
+              $JumpStart = Get-Date
+              
+              #Split computer list into batches of size $BatchSize, and loop through each batch running connectivity tests
+              for ($i = 0; $i -lt $ComputerList.Count; $i += $BatchSize) {
+                $Batch = $ComputerList| Select-Object -Skip $i -First $BatchSize
+                
+                foreach ($ComputerJson in $Batch) {
+                  #Start a PS job for this computer
+                  $Computer = ConvertFrom-Json $ComputerJson
+                  $ComputerName = $Computer.ComputerName
+                  $Username = $Computer.Username
+                  #$Password = $Computer.Password
+                  
+                  #Decrypt password string to secure string
+                  if ($Computer.Password) {
+                    $SecPass = ConvertTo-SecureString -String $Computer.Password -SecureKey $SecKey
+                  }
+                  else {
+                    $SecPass = ''
+                  }
+                  
+                  Start-Job -scriptblock $JobScript -ArgumentList $ComputerName, $Username, $SecPass| Out-Null
+                  Start-Sleep -Seconds 1
+                }
+                
+                Get-Job| Wait-Job -Timeout 180| Out-Null
+                      
+                foreach ($job in (Get-Job |Sort-Object -Property Id)) {
+                  $Result = ''
+                  
+                  Try {
+                    $Result = Receive-Job $job | Out-String
+                    Start-Sleep -Seconds 1
+                  }
+                  catch {
+                    $Result = "WARNING: could not receive job: $($job.name) Detail: $($_.Exception.Message)`r`n"
+                  }
+                  
+                  $Results += "$Result"
+                }
+                
+                Get-Job| Remove-Job -Force
+              }
+              
+              #Display 
+              $JumpEnd = Get-Date
+              $JumpRunTime = New-TimeSpan -Start $JumpStart -End $JumpEnd	
+              Write-Output "INFO: [$ActionTask]: $($ComputerList.Count) $Region region server(s) WinRM checked. Duration: $($JumpRunTime.Hours) Hrs. $($JumpRunTime.Minutes) Min. $($JumpRunTime.Seconds) Sec."
+              
+              $Output = @{
+                'results' = $Results
+              }
+              
+              $Json = ConvertTo-Json $Output -Compress
+              Write-Output "JSON: $Json"		
+            }
+              Catch {
+                  Write-Output "ERROR: [$ActionTask]: An  error has occured. Error details: $($_.Exception.Message)"
+                  #$_
+              }
+              Finally {
+                Get-PSSession| Remove-PSSession
+              }
+          }
+
+
+          ##################################################################################
+
+
+          ####################### RSRemote main script section #######################
+
+          $ErrorActionPreference = 'Stop'
+
+          #Query Cyberark to get passwords for each computer in the list
+          $ComputerCredentials = @()
+          $Computers = $ServerList -split "`n"
+          #$BinariesPath = 'C:\Program Files (x86)\CyberArk\ApplicationPasswordSdk'
+          $BinariesPath = 'C:\Program Files\CyberArk\ApplicationPasswordSdk'
+          Set-Location $BinariesPath
+          $AppID = 'APP_RESOLVE'
+          $Folder = 'Root'
+
+          #Generate random AES encryption Key for password encryption
+          $Key = New-Object Byte[] 16
+          [Security.Cryptography.RNGCryptoServiceProvider]::Create().GetBytes($Key)
+          $KeyString = [System.Text.Encoding]::Default.GetString($Key)
+          $SecKey = $KeyString| ConvertTo-SecureString -AsPlainText -Force
+
+          #Select CyberArk safe
+          Switch ($Region) {
+            'EMEA' {
+              $Safe = 'EMEA-AAM-RESOLVE'
+              $BatchSize = 10
+              Break
+            }
+            'APAC' {
+              $Safe = 'APAC-AAM-RESOLVE'
+              $BatchSize = 10
+              Break
+            }
+            'AMER' {
+              $Safe = 'AMER-AAM-RESOLVE'
+              $BatchSize = 10
+              Break
+            }
+              Default {
+                  $Safe = 'EMEA-AAM-RESOLVE'
+              $BatchSize = 10
+              }
+          }
+
+          #Log start time of CyberArk checks
+          $LocalStart = Get-Date
+
+          foreach ($ComputerName in $Computers) {
+            $ComputerName = $ComputerName.Trim()
+            
+            # Auto-healing local admin account
+            $Hostname = ($ComputerName.Split('.'))[0].ToUpper()
+            $Username = "$Hostname\$LocalUsername"
+            $ServiceAccountObject = "$($Hostname)_$LocalUsername"
+            
+            $Response = $Null
+            $Response = .\CLIPasswordSDK.exe GetPassword /p AppDescs.AppID=$AppID /p Query="Safe=$Safe;Folder=$Folder;Object=$ServiceAccountObject" /o Password| Out-String -Stream
+            
+            if ($Response) {
+              #Encrypt password
+              $SecResponse = ConvertTo-SecureString -String $Response -AsPlainText -Force
+              $EncPassString = ConvertFrom-SecureString -SecureString $SecResponse -SecureKey $SecKey
+              
+              $Credentials = @{
+                'ComputerName' = $ComputerName
+                'UserName' = $Username
+                'Password' = $EncPassString
+              }
+            }
+            else {
+              $Credentials = @{
+                'ComputerName' = $ComputerName
+                'UserName' = $Username
+                'Password' = ''
+              }	
+            }
+            
+            $ComputerCredentials += ConvertTo-Json $Credentials -Compress
+            Start-Sleep -Milliseconds 10
+          }
+
+          #Display run time of CyberArk checks
+          $LocalEnd = Get-Date
+          $LocalRunTime = New-TimeSpan -Start $LocalStart -End $LocalEnd
+          Write-Output "INFO: [$ActionTask]: CyberArk Onboarding checks duration: $($LocalRunTime.Hours) Hrs. $($LocalRunTime.Minutes) Min. $($LocalRunTime.Seconds) Sec."
+
+          #NOTE: When $ComputerListJson is converted from JSON on the jump server, it will be a large array of JSON strings, not a large array of PSCustomObjects (which could be very resource intensive.)
+          #Each JSON string can then be converted from JSON to a PSCustomObject one at a time, to reduce resource use on jump server.
+          $ComputerListJson = ConvertTo-Json $ComputerCredentials -Compress
+
+
+          #Connect to jump server and run connectivity WinRM tests on each computer in the list
+          if ($JumpServer) {
+              #Create the jump server credential & session variables for Invoke-Command
+              $JumpCred = New-Object System.Management.Automation.PSCredential -ArgumentList ($JumpUsername,$JumpPassword)
+              $SessOpt = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck -ProxyAccessType NoProxyServer
+              
+              try {
+              #Try HTTP connection on port 5985
+              Write-Output "INFO: [$ActionTask]: Connecting to jump server [$JumpServer] via HTTP on port 5985"
+              $JumpSession = New-PSSession -ComputerName $JumpServer -Credential $JumpCred -SessionOption $SessOpt
+              Write-Output "INFO: [$ActionTask]: Connected to jump server [$JumpServer] via HTTP on port 5985"
+              Invoke-Command -Session $JumpSession -Scriptblock $JumpScript -ArgumentList $ActionTask, $ComputerListJson, $BatchSize, $Region, $SecKey
+              }
+            Catch {
+              try {
+                #Port 5985 failed - try HTTPS on port 5986
+                Write-Output "INFO: [$ActionTask]: Connecting to jump server [$JumpServer] on port 5985 failed - trying port 5986"
+                $JumpSession = New-PSSession -ComputerName $JumpServer -Credential $JumpCred -Port 5986 -UseSSL -SessionOption $SessOpt
+                Write-Output "INFO: [$ActionTask]: Connected to jump server [$JumpServer] via HTTPS on port 5986"
+                Invoke-Command -Session $JumpSession -Scriptblock $JumpScript -ArgumentList $ActionTask, $ComputerListJson, $BatchSize, $Region, $SecKey
+              }
+              catch {
+                Write-Output "ERROR: [$ActionTask]: Connecting to jump server [$JumpServer] failed on ports 5985 & 5986. Details: $($_.Exception.Message)"
+              }
+            }
+            Finally {
+              Get-PSSession | Remove-PSSession
+            }
+          }
+          else {
+            #Jump server not used so run Invoke-Command locally
+            Invoke-Command -Scriptblock $JumpScript -ArgumentList $ActionTask, $ComputerListJson, $BatchSize, $Region, $SecKey
+          }
+
+          if (!$?) {
+            Write-Output "ERROR: [$ActionTask]: An unknown error has occured. Please see below for details:"
+            Write-Output $Error[0]
+          } 
+          
+      register: ps_output
+    - name: Display Powershell Output
+      ansible.builtin.debug:
+         var: ps_output
