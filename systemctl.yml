@@ -1,1 +1,41 @@
-systemctl show ssh.service --property=ExecStart
+---
+- name: Get Windows Service
+  hosts: "{{ ComputerName }}"
+  gather_facts: false
+  tasks:
+    - name: Run PowerShell script
+      ansible.windows.win_powershell:
+        script: |
+
+          # Execute Powershell Script in Windows Host
+          $ErrorActionPreference = "Stop"
+          $WarningPreference = "SilentlyContinue"
+          Try {
+            if (-Not $ServiceName) {
+              Throw "The Service Name is blank."
+            }
+            
+            $Service = systemctl show ssh.service --property=ExecStart
+            $Status = $Service.status
+            $StartType = $Service.StartType
+            $DisplayName = $Service.DisplayName
+            
+            Write-Output "INFO: [$ActionTask] The status of service [$ServiceName] is [$Status], its start type is [$StartType] and its display name is [$DisplayName]"
+            
+            $Output = @{
+              'status' = 	"$Status"
+              'start_type' = "$StartType"
+              'display_name' = "$DisplayName"
+            }
+            
+            $Json = ConvertTo-Json $Output -Compress
+            Write-Output "JSON: $Json"
+          }
+          Catch {
+            Write-Output "ERROR: [$ActionTask] Details: $($_.Exception.Message)"
+          }
+         
+      register: ps_output
+    - name: Display Powershell Output
+      ansible.builtin.debug:
+         var: ps_output
