@@ -7,8 +7,8 @@
       ansible.windows.win_powershell:
         script: |
           $ActionTask = 'new folder'
-          $ComputerName = {{ ComputerName }}
-          $FolderPath = {{ FolderPath }}
+          $ComputerName = '{{ ComputerName }}'
+          $FolderPath = '{{ FolderPath }}'
 
           # Execute Powershell Script in Windows Host
           Try {
