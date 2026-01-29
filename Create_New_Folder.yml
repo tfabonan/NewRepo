@@ -6,6 +6,9 @@
     - name: Run PowerShell script
       ansible.windows.win_powershell:
         script: |
+          $ActionTask = 'new folder'
+          $ComputerName = {{ COMPUTER_NAME }}
+          $FolderPath = {{ FOLDER_PATH }}
 
           # Execute Powershell Script in Windows Host
           Try {
