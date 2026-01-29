@@ -23,7 +23,6 @@
               #$_
                   Write-Output "ERROR: [$ActionTask]: An  error has occured creating folder [$FolderPath]. Error details: $($_.Exception.Message)"
               }
-          }
          
       register: ps_output
     - name: Display Powershell Output
