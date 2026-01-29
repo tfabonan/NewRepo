@@ -24,25 +24,7 @@
                   Write-Output "ERROR: [$ActionTask]: An  error has occured creating folder [$FolderPath]. Error details: $($_.Exception.Message)"
               }
           }
-
-          #create the credential object using username and password
-          $Cred = New-Object System.Management.Automation.PSCredential -ArgumentList ($ADUsername, $ADPassword)
-
-          #create the session variable for Invoke-Command
-          $SessOpt = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck -ProxyAccessType NoProxyServer
-          $remoteSession = New-PSSession -computerName $ComputerName -credential $Cred -SessionOption $SessOpt
-
-          Invoke-Command -Session $remoteSession -Scriptblock $script -ArgumentList $ActionTask, $FolderPath
-
-          #Invoke-Command -Scriptblock $script -ArgumentList $OnlineCred, $Cred, $ActionTask, $Tenant, $ClientId, $GraphApiUrl
-
-          if (!$?) {
-            Write-Output "ERROR: [$ActionTask]: An unknown error has occured. Please see below for details."
-            Write-Output $Error[0]
-          }
-
-          Get-PSSession| Remove-PSSession 
-          
+         
       register: ps_output
     - name: Display Powershell Output
       ansible.builtin.debug:
