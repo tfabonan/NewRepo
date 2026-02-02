@@ -1,0 +1,15 @@
+# decision.yml
+- name: Decision: pass if uptime < 600s, fail otherwise
+  hosts: linux            # <-- use your actual group/hosts
+  gather_facts: true
+  any_errors_fatal: true  # Fail the whole job if any host fails
+
+  tasks:
+    - name: Assert uptime < 600 seconds
+      ansible.builtin.assert:
+        that:
+          - (ansible_facts.uptime_seconds | int) < 600
+        fail_msg: >
+          Uptime is {{ ansible_facts.uptime_seconds }}s (>= 600). Routing to 'script2' via Failure path.
+        success_msg: >
+          Uptime is {{ ansible_facts.uptime_seconds }}s (< 600). Routing to 'script1' via Success path.
