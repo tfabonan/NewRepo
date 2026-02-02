@@ -1,0 +1,14 @@
+---
+- name: Calculate Uptime in Minutes
+  hosts: all
+  tasks:
+    - name: Run uptime calculation via bc
+      # Using '|' to allow the shell command to span multiple lines if needed
+      ansible.builtin.shell: |
+        echo $(awk '{print $1}' /proc/uptime) / 60 | bc
+      register: uptime_minutes
+      changed_when: false
+
+    - name: Display uptime result
+      ansible.builtin.debug:
+        msg: "The system has been up for {{ uptime_minutes.stdout }} minutes."
