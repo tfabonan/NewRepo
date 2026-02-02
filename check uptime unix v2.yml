@@ -1,0 +1,11 @@
+
+- name: Calculate Uptime using Ansible facts
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Compute minutes from uptime_seconds
+      ansible.builtin.set_fact:
+        uptime_minutes: "{{ (ansible_facts.uptime_seconds | int / 60) | int }}"
+    - name: Display
+      ansible.builtin.debug:
+        msg: "The system has been up for {{ uptime_minutes }} minutes."
