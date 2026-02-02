@@ -1,0 +1,45 @@
+---
+- name: Check uptime status Windows
+  hosts: "{{ ComputerName }}"
+  gather_facts: false
+  tasks:
+    - name: Run PowerShell script
+      ansible.windows.win_powershell:
+        script: |
+
+          # Execute Powershell Script in Windows Host
+          $ActionTask = "check uptime status windows"
+          $ComputerName = "{{ ComputerName }}"
+          Try {
+              $ErrorActionPreference = "Stop"
+              $WarningPreference = "SilentlyContinue"
+
+              if ($ComputerName) {
+                  $userSystem = Get-WmiObject win32_operatingsystem
+                  if ($userSystem.LastBootUpTime) {
+                      $sysuptime= (Get-Date) - $userSystem.ConvertToDateTime($userSystem.LastBootUpTime)
+                  }
+                  else {
+                      Throw "Last Boot UpTime not received."
+                  }
+
+                  Write-Output ("INFO: [$ActionTask]: Uptime : " + $sysuptime.Days + " Days " + $sysuptime.Hours + " Hours " + $sysuptime.Minutes + " Minutes" )
+                  $Seconds = ($sysuptime.Days*24*3600 + $sysuptime.Hours*3600 + $sysuptime.Minutes*60 + $sysuptime.Seconds)
+                  Write-Output "JSON: {`"uptime`":$Seconds}"
+              }
+              else {
+                  Throw "ComputerName to check uptime status is blank"
+              }
+          }
+          Catch {
+            Write-Output "ERROR: [$ActionTask]: $($_.Exception.Message)"
+          }   
+          
+      register: ps_output
+    - name: Display Powershell Output
+      ansible.builtin.debug:
+
+         var: ps_output
+
+
+
