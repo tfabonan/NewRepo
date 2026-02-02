@@ -1,0 +1,20 @@
+---
+- name: Validate Host Operating System
+  hosts: "{{ ComputerName }}"
+  gather_facts: yes
+  vars:
+    # Define expected OS family (e.g., RedHat, Debian, Windows)
+    expected_os: "Windows"
+    # Alternatively define specific distribution (e.g., CentOS, Ubuntu)
+    # expected_distro: "CentOS"
+
+  tasks:
+    - name: Fail if OS is not in the expected family
+      ansible.builtin.fail:
+        msg: "The host OS is {{ ansible_os_family }}, but expected {{ expected_os }}."
+      when: ansible_os_family != expected_os
+
+    - name: Display OS Information if valid
+      ansible.builtin.debug:
+
+        msg: "Valid OS detected: {{ ansible_distribution }} {{ ansible_distribution_version }}"
