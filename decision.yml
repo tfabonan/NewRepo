@@ -1,6 +1,6 @@
 # decision.yml
 - name: Decision: pass if uptime < 600s, fail otherwise
-  hosts: linux            # <-- use your actual group/hosts
+  hosts: "{ComputerName}"            # <-- use your actual group/hosts
   gather_facts: true
   any_errors_fatal: true  # Fail the whole job if any host fails
 
