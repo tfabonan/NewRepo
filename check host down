@@ -1,0 +1,18 @@
+---
+- name: Check if host is down
+  hosts: "{ComputerName}"
+  gather_facts: no
+  tasks:
+    - name: Ping host to check connectivity
+      ansible.builtin.ping:
+      register: ping_result
+      ignore_unreachable: yes
+
+    - name: Report host status
+      ansible.builtin.debug:
+        msg: "{{ ComputerName }} is {{ (ping_result.unreachable is defined and ping_result.unreachable) | ternary('DOWN', 'UP') }}"
+
+    - name: Fail if host is down
+      ansible.builtin.fail:
+        msg: "Host {{ inventory_hostname }} is unreachable!"
+      when: ping_result.unreachable is defined and ping_result.unreachable
