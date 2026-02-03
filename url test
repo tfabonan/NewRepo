@@ -1,0 +1,13 @@
+---
+- name: Test URL Availability
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Check if the website is up
+      ansible.builtin.uri:
+        url: "http://192.168.181.130:30636"method: GET
+        status_code: 200register: _result
+
+    - name: Display the result
+      ansible.builtin.debug:
+        var: _result.status
