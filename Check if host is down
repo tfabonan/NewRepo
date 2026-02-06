@@ -1,0 +1,34 @@
+---
+- name: Check if host is down
+  hosts: "{{ ComputerName }}"
+  gather_facts: no
+  tasks:
+    - name: Set the variable to pass
+      ansible.builtin.set_stats:
+        data:
+          # Define the variable name and its value
+          splunk_incident_status: "Closed"
+        # Optional: set per-host information (requires more advanced handling in the next playbook)
+        # per_host: true
+
+#    - name: Get password from CyberArk
+#     ansible.builtin.debug:
+#        msg: "{{ lookup('cyberark.pas.cyberark_credential', query=cyquery) }}"
+#      vars:
+#       cyquery: "appid=APP_RESOLVE;safe=mysafe;object={{ ComputerName }}__Admin.Mig.Resolve"
+#     register: host_password
+
+    - name: Ping host to check connectivity
+      ansible.builtin.ping:
+      register: ping_result
+      ignore_unreachable: false
+
+    - name: Report host status
+      ansible.builtin.debug:
+        msg: "{{ ComputerName }} is {{ (ping_result.unreachable is defined and ping_result.unreachable) | ternary('DOWN', 'UP') }}"
+
+    - name: Fail if host is down
+      ansible.builtin.fail:
+        msg: "Host {{ ComputerName }} is unreachable!"
+        splunk_incident_status: "Failed"
+      when: ping_result.unreachable is defined and ping_result.unreachable
